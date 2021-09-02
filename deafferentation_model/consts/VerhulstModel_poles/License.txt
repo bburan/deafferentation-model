@@ -1,0 +1,4 @@
+The files in this repository can only be used for the purpose of the R01 grant application entitled: "Mouse, man, and machine: Combining model systems to predict cochlear synaptopathy".  
+
+No other rights, even implied, are granted; for the avoidance of doubt, UGent wishes to clarify that the reviewers are not allowed to: 
+(a) make public, copy, distribute, or use the files as part of other software, without the prior authorization of UGent. (b)create derivative works based on the Software or knowingly permit any third party to engage in the foregoing. 
