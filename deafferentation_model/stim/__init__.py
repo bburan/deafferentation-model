@@ -13,30 +13,6 @@ ABR_STIM_DESCRIPTIONS = {
             'rise_time': 4 / 4000,
         }
     },
-    'NCRAR-ABR': {
-        3000: {
-            'levels': [110],
-            'duration': 7.5 / 3000,
-            'rise_time': 0.5e-3,
-        },
-        4000: {
-            'levels': [80, 90, 100, 110],
-            'duration': 8 / 4000,
-            'rise_time': 0.5e-3,
-        },
-        6000: {
-            'levels': [110],
-            'duration': 9 / 6000,
-            'rise_time': 0.5e-3,
-        }
-    },
-    'NCRAR-EFR': {
-        4000: {
-            'levels': [90, 100, 110],
-            'duration': 8 / 4000,
-            'rise_time': 0.5e-3,
-        },
-    }
 }
 
 
@@ -102,21 +78,6 @@ def generate_tone(fs, frequency, level, duration, rise_time, total_duration=4e-3
     return tone * env * util.spl_to_pa(level)
 
 
-def generate_tones_old(study, fs=100e3, total_duration=4e-3):
-    total_samples = round(total_duration * fs)
-    t = np.arange(total_samples)/fs
-    tone_stim = {}
-    for frequency, ti in ABR_STIM_DESCRIPTIONS[study].items():
-        duration = ti['duration']
-        levels = ti['levels']
-        rise_time = ti['rise_time']
-        tone = np.cos(2*np.pi*frequency*t)
-        env = blackman_envelope(fs, 0, total_samples, 0, rise_time, duration)
-        for level in levels:
-            tone_stim[frequency, level] = tone * env * util.spl_to_pa(level)
-    return t, tone_stim
-
-
 def generate_efr(fs, fc, fm, depth, level, stim_duration, rise_time, actual_duration):
     total_samples = round(stim_duration * fs)
     t = np.arange(total_samples)/fs
@@ -135,20 +96,26 @@ def fir_filter(fs, x, fl, fh, n_taps=1024, transition_width=0.1, mode='full'):
         0,
         fl_norm * (1 - transition_width),
         fl_norm,
-        np.mean([fl_norm, fh_norm]),
+        (fl_norm + fh_norm)/ 2,
         fh_norm,
         fh_norm * (1 + transition_width),
         1,
     ]
     gains = [0, 3e-5, 1, 1, 1, 3e-5, 0]
     b = signal.firwin2(n_taps, frequency_breakpoints, gains)
-    x_filt = np.convolve(x, b, mode=mode)
-    return x_filt
+    return np.convolve(x, b, mode=mode)
 
 
 def filtered_click(fs, level, duration=100e-6, full_duration=5e-3, trim=1e-3,
-                   polarity='rarefaction', center=5e-3):
-    # Use peak to peak equivalent
+                   polarity='rarefaction', center=None, fl=350, fh=8000,
+                   transition_width=0.1, n_taps=1024):
+
+    if center is None:
+        center = full_duration / 2
+
+    # Calculation of amp is 10**((level - maxLevel) / 20) where maxLevel is
+    # the output, in dB SPL produced by a 1V tone (0 to 1V, i.e., digital
+    # baseline).
     sf = util.spl_to_pa(level)
 
     samples = int(round(fs * duration))
@@ -158,9 +125,10 @@ def filtered_click(fs, level, duration=100e-6, full_duration=5e-3, trim=1e-3,
     click = np.zeros(window_samples)
     click[c:c+samples] = 1
 
-    click_filt = fir_filter(fs, click, 350, 3000)
+    click_filt = fir_filter(fs, click, fl, fh,
+                            transition_width=transition_width, n_taps=n_taps)
     click_filt /= np.ptp(click_filt)
-    click_filt = click_filt * sf
+    click_filt = click_filt * sf * 2
     i = np.argmax(click_filt)
     click_filt = click_filt[i-trim_samples:i+trim_samples]
     segment = np.zeros(window_samples)
@@ -173,13 +141,15 @@ def filtered_click(fs, level, duration=100e-6, full_duration=5e-3, trim=1e-3,
     return segment
 
 
-
 def broadband_noise(fs, level, duration):
+    # This algorithm is based on how Carcagno does it.
     samples = int(round(fs * duration))
-    #sf = np.sqrt(fs / 2) * util.spl_to_pa(level)
-    # TODO: HACK ALERT!
-    sf = util.spl_to_pa(level + 25)
-    return np.random.uniform(-sf*np.sqrt(3), sf*np.sqrt(3), size=samples)
+    sf = np.sqrt(fs / 2) * util.spl_to_pa(level)
+    noise = (np.random.random(samples) + np.random.random(samples)) - \
+        (np.random.random(samples) + np.random.random(samples))
+    rms = np.sqrt(np.mean(noise**2))
+    noise = noise / (rms * np.sqrt(2))
+    return noise * sf
 
 
 def cos2ramp(t, rise_time, phi=0):
@@ -238,10 +208,13 @@ def cos2envelope(fs, offset, samples, start_time, rise_time, duration):
 def make_pink(fs, noise):
     n = len(noise)
     csd = np.fft.rfft(noise)
-    i_reference = int(round(1000 * n / fs))
-    i = np.arange(len(csd))
+    i_reference = 1 + int(round(1000 * n / fs))
+    i = np.arange(1, len(csd))
+
+    mag = np.zeros(len(csd))
+    mag[1:] = np.abs(csd[1:]) * np.sqrt(i_reference / i)
+    mag[0] = np.abs(csd[0])
     phase = np.angle(csd)
-    magnitude = np.abs(csd) * np.sqrt(i_reference / i)
-    magnitude[0] = np.abs(csd[0])
-    pink_csd = magnitude * (np.cos(phase) + 1j * np.sin(phase))
-    return np.fft.irfft(pink_csd)
+
+    pink_csd = mag * (np.cos(phase) + 1j * np.sin(phase))
+    return np.fft.irfft(pink_csd, n)

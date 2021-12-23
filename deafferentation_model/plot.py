@@ -16,9 +16,11 @@ def imshow(z, ax=None):
     ax.set_yticks(ticks)
     ax.set_yticks([], minor=True)
     ax.set_yticklabels(f'{t*1e-3:.2f}' for t in ticks)
+    ax.set_ylabel('Cochlear Frequency (kHz)')
+    ax.set_xlabel('Time (msec)')
 
 
-def plot_cochleagrams(trace, ax=None, cf_lb=150, cf_ub=20e3):
+def plot_cochleagrams(trace, ax=None, cf_lb=150, cf_ub=20e3, color='k'):
     if ax is None:
         figure, ax = plt.subplots(1, 1)
 
@@ -36,7 +38,7 @@ def plot_cochleagrams(trace, ax=None, cf_lb=150, cf_ub=20e3):
 
     y = np.exp(y_ln)
     y_mean = y.mean(axis=(0, 1))
-    ax.semilogx(cf, y_mean.T, 'k-', alpha=0.25)
+    ax.semilogx(cf, y_mean.T, '-', color=color, alpha=0.25)
 
     ticks = 2**np.arange(np.log2(200), 14)
     ticks = ticks[::2]

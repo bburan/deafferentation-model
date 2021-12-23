@@ -71,6 +71,19 @@ def _model_abr(cache_file=None, **model_kwargs):
         return result
 
 
+def _model_oae(cache_file=None, **model_kwargs):
+    model = cochlea_model()
+    model.init_model(**model_kwargs)
+    model.solve()
+    #result = get_abr(100e3, model)
+    result = model.oto_emission[:]
+    if cache_file is not None:
+        with cache_file.open('wb') as fh:
+            pickle.dump(result, fh)
+    else:
+        return result
+
+
 def _concat_results(results, stim, subjects):
     rates = []
     time = results[0]['t']
@@ -98,7 +111,7 @@ def _concat_results(results, stim, subjects):
     )
 
 
-def model_an(stim_waveforms, subject_poles, cache_path):
+def model_an(stim_waveforms, subject_poles, cache_path, n_jobs=12, redo=False):
     '''
     Returns
     -------
@@ -121,13 +134,14 @@ def model_an(stim_waveforms, subject_poles, cache_path):
         for subject_key, poles in subject_poles.iterrows():
             cache_file = cache_path / f'{subject_key}_{stim_key}.pkl'
             if cache_file.exists():
-                continue
+                if not redo:
+                    continue
             job = delayed(_model_abr)(stim=stim, sheraPo=poles,
                                       cache_file=cache_file, **model_kwargs)
             jobs.append(job)
 
     print(f'Queued {len(jobs)} jobs')
-    Parallel(n_jobs=12, verbose=50)(jobs)
+    Parallel(n_jobs=n_jobs, verbose=50)(jobs)
     print('Done!')
 
 

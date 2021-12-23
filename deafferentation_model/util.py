@@ -78,3 +78,15 @@ def psd_df(s, fs, *args, **kw):
     else:
         index = s.index if isinstance(s, pd.DataFrame) else None
         return pd.DataFrame(p, columns=freqs, index=index)
+
+def calc_synapses(cf, theta):
+    if theta.ndim == 3:
+        return np.exp(theta)
+    if cf is None:
+        return np.exp(theta[..., 2])
+    x = inv_greenwood(cf)
+    return np.exp(-np.exp(theta[..., 0]) * (x - theta[..., 1])**2 + theta[..., 2])
+
+
+def rms(x):
+    return np.mean(x ** 2, axis=0) ** 0.5

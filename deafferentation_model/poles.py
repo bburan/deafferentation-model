@@ -30,6 +30,7 @@ def _load_pole_constants():
 def _compute_poles_audiogram(audiogram):
     cf, nh_poles, SMax = _load_pole_constants()
     poles = np.arange(0.036, 0.3025, 0.001)
+    audiogram = audiogram.sort_index()
     audiogram_interp = np.interp(cf, audiogram.index.values, audiogram.values)
 
     i = np.interp(nh_poles, poles, np.arange(len(poles)))
